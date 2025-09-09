@@ -15,6 +15,9 @@ So, here, the analytical calendar has a new design:
 
 Take a look and enjoy!
 
+* I am trying to manipulate the same in Tableau and PowerBI but because of the fundamental differences of query-based vs assocaitive model, it might not fully show the power of the analytical calendar.   Welcome comments and suggestions. Thanks!
+
+
 # Kongson Blog
 If you like to explore more from me, please go to my blog [Kongson Technology Blog](https://kongsoncheung.blogspot.com/).
 
