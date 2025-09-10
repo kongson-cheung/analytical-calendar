@@ -1,3 +1,5 @@
+* Appreciated if anyone can share me the Qlik license to continue of this work.
+
 # Analytical Calendar
 
 Analytical Calendar is an innovative design for time intelligence in Qlik dashboards.  It fully integrates into the green-white-grey design and fits very well into the associative data model. 
@@ -18,7 +20,23 @@ Take a look and enjoy!
 * I am trying to manipulate the same in Tableau and PowerBI but because of the fundamental differences of query-based vs assocaitive model, it might not fully show the power of the analytical calendar.   Welcome comments and suggestions. Thanks!
 
 
+## The analytical calendar for 2022 to 2026 is available.
+- ANALYTICAL_CALENDAR_2022_to_2026.qvd
+- DIM_CALENDAR_2022_to_2026.qvd
+- LINKED_TABLE_DATE_RANGE_2022_to_2026.qvd
+
+Load these three tables and then in your Fact table, change the date field as %DATE_KEY.  You can start enjoy the benefit.
+
+For exaxmple:
+- analysis period, sum({<[Comparison Perspective]={'N/A'}>} Exp1)
+- comparison period, sum(Exp1)
+
+All charts are now integrated to the green-white-grey with both the analysis period and comparison period!!
+
+Enjoy!
+
+
 # Kongson Blog
 If you like to explore more from me, please go to my blog [Kongson Technology Blog](https://kongsoncheung.blogspot.com/).
 
-
+And if you find it great, support me via [Buy Me Coffee](https://buymeacoffee.com/kongsoncheung).
