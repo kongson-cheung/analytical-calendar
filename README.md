@@ -21,13 +21,13 @@ Take a look and enjoy!
 
 
 ## The analytical calendar for 2022 to 2026 is available.
-- ANALYTICAL_CALENDAR_2022_to_2026.qvd
-- DIM_CALENDAR_2022_to_2026.qvd
-- LINKED_TABLE_DATE_RANGE_2022_to_2026.qvd
+- [ANALYTICAL_CALENDAR.qvd](https://github.com/kongson-cheung/analytical-calendar/raw/refs/heads/main/Analytical%20Calendar%20QVD/2022-2026/ANALYTICAL_CALENDAR.qvd)
+- [DIM_CALENDAR.qvd](https://github.com/kongson-cheung/analytical-calendar/raw/refs/heads/main/Analytical%20Calendar%20QVD/2022-2026/DIM_CALENDAR.qvd)
+- [LINKED_TABLE_DATE_RANGE.qvd](https://github.com/kongson-cheung/analytical-calendar/blob/main/Analytical%20Calendar%20QVD/2022-2026/LINKED_TABLE_DATE_RANGE.qvd)
 
-Load these three tables and then in your Fact table, change the date field as %DATE_KEY.  You can start enjoy the benefit.
+Load these three tables (e.g. using web file) and then load your Fact table with a date field as %DATE_KEY.  You can start enjoy the benefit of the analytical calendar.
 
-For exaxmple:
+In general, you will just need two similar expressions.
 - analysis period, sum({<[Comparison Perspective]={'N/A'}>} Exp1)
 - comparison period, sum(Exp1)
 
