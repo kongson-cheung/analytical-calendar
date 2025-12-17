@@ -19,6 +19,27 @@ Take a look and enjoy!
 
 * I am trying to manipulate the same in Tableau and PowerBI but because of the fundamental differences of query-based vs assocaitive model, it might not fully show the power of the analytical calendar.   Welcome comments and suggestions. Thanks!
 
+## The analytical calendar (Qlik qvs) Available.
+- AnalyticalCalendar.qvs (https://github.com/kongson-cheung/analytical-calendar/blob/main/AnalyticalCalendar.qvs)
+
+Use the QVS to help you generate the analytical calendar.   Please make sure your Fact table with a date field as %DATE_KEY to associate with the analytical calendar.
+
+The following are the parameters to customise:
+* **vStartDate** - It is the start date of the calendar.
+* **vEndDate** - It is the end date of the calendar.
+* **vMaxYRolling** - It is the maximum rolling years.
+* **vMaxQRolling** - It is the maximum rolling year quarters.
+* **vMaxMRolling** - It is the maximum rolling year months.
+* **vMaxWRolling** - It is the maximum rolling year weeks.
+* **vMaxDRolling** - It is the maximum rolling days.
+* **vMaxYComparison** - It is the maximum comparison year range.
+* **vMaxQComparison** - It is the maximum comparison year quarter range.
+* **vMaxMComparison** - It is the maximum comparison year month range.
+* **vMaxWComparison** - It is the maximum comparison year week range.
+* **vMaxDComparison** - It is the maximum comparison date range.
+
+It includes bother Incomplete Week (Broken Week) or Complete Week (Unbroken Week).  So, pick one of the week usage and remove the one that you do not want to use.
+
 
 ## The analytical calendar for 2022 to 2026 is available.
 - [ANALYTICAL_CALENDAR.qvd](https://github.com/kongson-cheung/analytical-calendar/raw/refs/heads/main/Analytical%20Calendar%20QVD/2022-2026/ANALYTICAL_CALENDAR.qvd)
@@ -27,6 +48,8 @@ Take a look and enjoy!
 
 Load these three tables (e.g. using web file) and then load your Fact table with a date field as %DATE_KEY.  You can start enjoy the benefit of the analytical calendar.
 
+
+## How to Make Use of the Analytical Calendar
 In general, you will just need two similar expressions.
 - analysis period, sum({<[Comparison Perspective]={'N/A'}>} Exp1)
 - comparison period, sum(Exp1)
