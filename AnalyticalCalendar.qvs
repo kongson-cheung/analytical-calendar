@@ -1,0 +1,1713 @@
+﻿///$tab Main
+///$tab Main
+SET ThousandSep=',';
+SET DecimalSep='.';
+SET MoneyThousandSep=',';
+SET MoneyDecimalSep='.';
+SET MoneyFormat='HK$#,##0.00;-HK$#,##0.00';
+SET TimeFormat='h:mm:ss TT';
+SET DateFormat='D/M/YYYY';
+SET TimestampFormat='D/M/YYYY h:mm:ss[.fff] TT';
+SET FirstWeekDay=6;
+SET BrokenWeeks=1;
+SET ReferenceDay=0;
+SET FirstMonthOfYear=1;
+SET CollationLocale='en-HK';
+SET MonthNames='Jan;Feb;Mar;Apr;May;Jun;Jul;Aug;Sep;Oct;Nov;Dec';
+SET LongMonthNames='January;February;March;April;May;June;July;August;September;October;November;December';
+SET DayNames='Mon;Tue;Wed;Thu;Fri;Sat;Sun';
+SET LongDayNames='Monday;Tuesday;Wednesday;Thursday;Friday;Saturday;Sunday';
+///$tab Config
+Let vStartDate = makedate(2022,1, 1);
+Let vEndDate = makedate(2026,12,31); //Today();
+Let vTotalDays = vEndDate - vStartDate;
+
+
+Let vMaxYRolling = 3;
+Let vMaxQRolling = 3;
+Let vMaxMRolling = 11;
+Let vMaxWRolling = 26;
+Let vMaxDRolling = 30;
+
+
+Let vMaxYComparison = 3;
+Let vMaxQComparison = 3;
+Let vMaxMComparison = 11;
+Let vMaxWComparison = 26;
+Let vMaxDComparison = 30;
+
+
+///$tab Internal Config
+COMPARISON_CONFIG:
+LOAD * INLINE [
+DateRangeType,ComparisonUnit
+D-Actual,D
+D-Actual,M
+D-Actual,W
+D-Actual,Y
+D-Actual,Q
+D-Month to Date,M
+D-Month to Date,Q
+D-Month to Date,Y
+D-Rolling,D
+D-Rolling,M
+D-Rolling,W
+D-Rolling,Q
+D-Rolling,Y
+D-Year to Date,Y
+M-Actual,M
+M-Actual,Q
+M-Actual,Y
+M-Rolling,M
+M-Rolling,Q
+M-Rolling,Y
+M-Year to Month,Y
+Y-Actual,Y
+Y-Rolling,Y
+W-Actual,W
+W-Actual,Y
+W-Rolling,W
+W-Rolling,Y
+W-Year to Week,Y
+Q-Actual,Q
+Q-Actual,Y
+Q-Rolling,Q
+Q-Rolling,Y
+Q-Year to Quarter,Y
+];
+
+
+
+LEFT JOIN(COMPARISON_CONFIG)
+LOAD * INLINE[
+ComparisonUnit, MaxComparison
+D,$(vMaxDComparison)
+W,$(vMaxWComparison)
+M,$(vMaxMComparison)
+Q,$(vMaxQComparison)
+Y,$(vMaxYComparison)
+];
+
+
+
+
+
+
+ANALYTICAL_CALENDAR_ANALYSIS_PERSPECTIVE_SEQ:
+LOAD * INLINE[
+DateRangeType,%ANALYSIS_PERSPECTIVE_SEQ
+Y-Actual,100000	
+Y-Rolling,200000	
+Q-Actual,300000	
+Q-Year to Quarter,400000	
+Q-Rolling,500000	
+M-Actual,600000	
+M-Year to Month,700000	
+M-Rolling,800000	
+W-Actual,900000	
+W-Year to Week,1000000	
+W-Rolling,1100000	
+D-Actual,1200000	
+D-Year to Date,1300000	
+D-Month to Date,1400000	
+D-Rolling,1500000	
+];
+
+
+ANALYTICAL_CALENDAR_COMPARISON_PERSPECTIVE_SEQ:
+LOAD * INLINE[
+ComparisonUnit, %COMPARISON_PERSPECTIVE_SEQ
+Y,200000	
+Q,300000	
+M,400000	
+W,500000	
+D,600000	
+];
+///$tab Calendar
+TEMP_CALENDAR:
+LOAD
+	Date(Num('$(vStartDate)')+RecNo()-1) as Date
+AutoGenerate vTotalDays+1;
+
+
+
+CALENDAR:
+LOAD
+	Date as %DATE_KEY,
+
+	Date,
+	Year,
+	Quarter,
+	Month,
+	Day,
+	Weekday,
+	WeekYearComplete,
+	WeekComplete,
+	Year as WeekYearIncomplete,
+	WeekIncomplete,
+	
+
+	Text(Date(Date, 'YYYY-MMM')) as YearMonth,
+	Year & '-Q' & Quarter as YearQuarter,
+	WeekYearComplete & '-W' & WeekComplete as YearWeekComplete,
+	Year & '-W' & WeekIncomplete as YearWeekIncomplete,
+	
+	Year as YearSeq,	
+	Quarter as QuarterSeq,
+	Month as MonthSeq,
+	Num(Date) as DateSeq,
+	WeekdayNum as WeekdaySeq,
+
+	Year * 4 + Quarter as YearQuarterSeq,	
+	Year * 12 + Month as YearMonthSeq,
+	Floor((Date - WeekStart(Makedate(1900, 1, 1))) / 7) as YearWeekCompleteSeq,
+	Year * 53 + WeekIncomplete as YearWeekIncompleteSeq
+	
+	
+	
+;
+/*
+LOAD
+	*,
+	IF(Count7=1, IF(CrossYearWeekFlag, 53, 2), Count7+1)
+	  + IF(WeekDay(MakeDate(WeekYearComplete,1,1))=0, -1, 0) as WeekComplete,
+;
+LOAD
+	*,
+	IF(CrossYearWeekFlag, YearInFirstDayOfWeek, Year) as WeekYearComplete
+;
+*/
+LOAD
+	*,
+	//YearInFirstDayOfWeek <> Year(Date) as CrossYearWeekFlag
+	if(WeekIncomplete=1 and Not(YearStartOnSundayFlag), 53, Ceil((Date - Weekday(Date)- YearStart(Date))/7+1))  as WeekComplete,
+	if(WeekIncomplete=1 and Not(YearStartOnSundayFlag), Year-1, Year)  as WeekYearComplete
+;
+LOAD
+	Date,
+	Num(Year(Date)) as Year,
+	Ceil(Month(Date)/3) as Quarter,
+	Num(Month(Date)) as Month,
+	Num(Day(Date)) as Day,
+	Text(Date(Date, 'WWWW')) as Weekday,
+	
+	//for weeks	
+	Num(WeekDay(Date)) as WeekdayNum,
+	Week(Date) as WeekIncomplete,
+	
+	//Year(Date - Num(WeekDay(Date))) as YearInFirstDayOfWeek,
+	//Ceil(DayNumberOfYear(Date - Num(WeekDay(Date)))/7) as Count7,
+	Weekday(YearStart(Date)) = 0  as YearStartOnSundayFlag
+	
+
+	
+Resident TEMP_CALENDAR;
+
+
+
+DROP TABLE TEMP_CALENDAR;
+
+
+
+/*
+To Find the
+*/
+TEMP_MIN_MAX:
+LOAD
+	Min(Year) as MinYear,
+	Min(YearQuarter) as MinYearQuarter,
+	Min(YearMonth) as MinYearMonth,
+	Min(Date) as MinDate,
+	Min(YearWeekComplete) as MinYearWeekComplete,
+	Min(YearWeekIncomplete) as MinYearWeekIncomplete,
+	Min(YearSeq) as MinYearSeq,
+	Min(YearQuarterSeq) as MinYearQuarterSeq,
+	Min(YearMonthSeq) as MinYearMonthSeq,
+	Min(DateSeq) as MinDateSeq,
+	Min(YearWeekCompleteSeq) as MinYearWeekCompleteSeq,
+	Min(YearWeekIncompleteSeq) as MinYearWeekIncompleteSeq,
+	
+	Max(Year) as MaxYear,
+	Max(YearQuarter) as MaxYearQuarter,
+	Max(YearMonth) as MaxYearMonth,
+	Max(Date) as MaxDate,
+	Max(YearWeekComplete) as MaxYearWeekComplete,
+	Max(YearWeekIncomplete) as MaxYearWeekIncomplete,
+	Max(YearSeq) as MaxYearSeq,
+	Max(YearQuarterSeq) as MaxYearQuarterSeq,
+	Max(YearMonthSeq) as MaxYearMonthSeq,
+	Max(DateSeq) as MaxDateSeq,
+	Max(YearWeekCompleteSeq) as MaxYearWeekCompleteSeq,
+	Max(YearWeekIncompleteSeq) as MaxYearWeekIncompleteSeq
+Resident CALENDAR;
+
+
+Let vMinYear = Peek('MinYear', 0, 'TEMP_MIN_MAX');
+Let vMinYearQuarter = Peek('MinYearQuarter', 0, 'TEMP_MIN_MAX');
+Let vMinYearMonth = Peek('MinYearMonth', 0, 'TEMP_MIN_MAX');
+Let vMinDate = Peek('MinDateSeq', 0, 'TEMP_MIN_MAX');
+Let vMinYearWeekComplete = Peek('MinYearWeekComplete', 0, 'TEMP_MIN_MAX');
+Let vMinYearWeekIncomplete = Peek('MinYearWeekIncomplete', 0, 'TEMP_MIN_MAX');
+Let vMinYearSeq = Peek('MinYearSeq', 0, 'TEMP_MIN_MAX');
+Let vMinYearQuarterSeq = Peek('MinYearQuarterSeq', 0, 'TEMP_MIN_MAX');
+Let vMinYearMonthSeq = Peek('MinYearMonthSeq', 0, 'TEMP_MIN_MAX');
+Let vMinDateSeq = Peek('MinDateSeq', 0, 'TEMP_MIN_MAX');
+Let vMinYearWeekCompleteSeq = Peek('MinYearWeekCompleteSeq', 0, 'TEMP_MIN_MAX');
+Let vMinYearWeekIncompleteSeq = Peek('MinYearWeekIncompleteSeq', 0, 'TEMP_MIN_MAX');
+
+
+Let vMaxYear = Peek('MaxYear', 0, 'TEMP_MIN_MAX');
+Let vMaxYearQuarter = Peek('MaxYearQuarter', 0, 'TEMP_MIN_MAX');
+Let vMaxYearMonth = Peek('MaxYearMonth', 0, 'TEMP_MIN_MAX');
+Let vMaxDate = Peek('MaxDateSeq', 0, 'TEMP_MIN_MAX');
+Let vMaxYearWeekComplete = Peek('MaxYearWeekComplete', 0, 'TEMP_MIN_MAX');
+Let vMaxYearWeekIncomplete = Peek('MaxYearWeekIncomplete', 0, 'TEMP_MIN_MAX');
+Let vMaxYearSeq = Peek('MaxYearSeq', 0, 'TEMP_MIN_MAX');
+Let vMaxYearQuarterSeq = Peek('MaxYearQuarterSeq', 0, 'TEMP_MIN_MAX');
+Let vMaxYearMonthSeq = Peek('MaxYearMonthSeq', 0, 'TEMP_MIN_MAX');
+Let vMaxDateSeq = Peek('MaxDateSeq', 0, 'TEMP_MIN_MAX');
+Let vMaxYearWeekCompleteSeq = Peek('MaxYearWeekCompleteSeq', 0, 'TEMP_MIN_MAX');
+Let vMaxYearWeekIncompleteSeq = Peek('MaxYearWeekIncompleteSeq', 0, 'TEMP_MIN_MAX');
+
+
+
+DROP TABLE TEMP_MIN_MAX;
+///$tab ExpandTable
+TEMP_EXPAND_ROW:
+LOAD
+  RowNo()-1 as Num
+AutoGenerate 2000;
+
+
+JOIN(TEMP_EXPAND_ROW)
+LOAD
+	Num as ExpandedNum
+RESIDENT TEMP_EXPAND_ROW;
+
+EXPAND_ROW:
+NoConcatenate
+LOAD
+	Num,
+	ExpandedNum
+RESIDENT TEMP_EXPAND_ROW
+where ExpandedNum <= Num;
+
+DROP TABLE TEMP_EXPAND_ROW;
+
+
+///$tab Date
+/*Prepare all the date range for Date*/
+TEMP_DATE_ANALYSIS_CALENDAR:
+CrossTable(DateRangeType, Range, 3)
+LOAD
+	Date as EndDate,
+	Text(Date) as UniqueDate,
+	DateSeq as UniqueDateSeq,
+	
+	Date - YearStart(Date) +1 as [D-Year to Date],
+	Date - MonthStart(Date) + 1 as [D-Month to Date],
+	1 as [D-Actual],
+	$(vMaxDRolling) as [D-Rolling]
+resident CALENDAR;
+
+
+// Expand the max rolling, e.g. max 3 days rolling means rolling 3 days, rolling 2 days.  Rolling 1 day is excluded because of no meaning.
+LEFT JOIN(TEMP_DATE_ANALYSIS_CALENDAR)
+LOAD
+	'D-Rolling' as DateRangeType,
+	
+	RowNo()+1 as RangeRolling
+AutoGenerate $(vMaxDRolling)-1;
+
+
+//Calculate the start date and end date and exclude those range not included in the date available.
+DATE_ANALYSIS_CALENDAR:
+NoConcatenate
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	Date(EndDate + 1 - if(isNull(RangeRolling), Range, RangeRolling)) as StartDate,
+	EndDate
+RESIDENT TEMP_DATE_ANALYSIS_CALENDAR
+where isNull(RangeRolling) or (RangeRolling>1 and (UniqueDateSeq - RangeRolling+1 >= $(vMinDateSeq)));
+
+
+
+DROP TABLE TEMP_DATE_ANALYSIS_CALENDAR;
+//DROP TABLE DATE_ANALYSIS_CALENDAR;
+
+
+
+/*Prepare for Analysis Calendar*/
+ANALYSIS_CALENDAR:
+NoConcatenate
+LOAD 
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate 
+RESIDENT DATE_ANALYSIS_CALENDAR;
+
+
+
+
+///$tab DateComparison
+//Prepare for Comparison Calendar.
+TEMP_DATE_COMPARISON_CALENDAR:
+NoConcatenate
+LOAD 
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate 
+resident DATE_ANALYSIS_CALENDAR;
+
+
+//based on the date range type and the comparison unit, match the maxiumn comparison range.
+LEFT JOIN(TEMP_DATE_COMPARISON_CALENDAR)
+LOAD
+	DateRangeType,
+	
+	ComparisonUnit,
+	MaxComparison
+resident COMPARISON_CONFIG;
+
+
+//expand the max comparison range.
+LEFT JOIN(TEMP_DATE_COMPARISON_CALENDAR)
+LOAD
+	Num as MaxComparison,
+	
+	ExpandedNum as ComparisonRange
+resident EXPAND_ROW
+where ExpandedNum>0;
+
+
+
+//Calculate the comparison start and end dates.
+DATE_COMPARISON_CALENDAR:
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ComparisonStartDate,
+	ComparisonEndDate
+where ComparisonEndDate>='$(vStartDate)';
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,	
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ComparisonStartDate,
+	Date(if (DateRangeType = 'D-Year to Date' or DateRangeType = 'D-Month to Date'
+		, ComparisonStartDate + EndDate - StartDate
+		, If(ComparisonUnit = 'Y',
+			AddYears(EndDate,-ComparisonRange)
+			, if(ComparisonUnit = 'Q'
+				, AddMonths(EndDate,-3*ComparisonRange)
+				, if(ComparisonUnit = 'M'
+					, AddMonths(EndDate,-ComparisonRange)
+					, if(ComparisonUnit = 'W'
+						, EndDate -7 * ComparisonRange
+						, If(ComparisonUnit = 'D'
+							, EndDate -ComparisonRange
+							)
+						)
+					)
+				)
+			)
+		)) as ComparisonEndDate;
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	
+	Date(if( (DateRangeType = 'D-Year to Date' or DateRangeType = 'D-Month to Date') and ComparisonUnit = 'Y'
+		, AddYears(StartDate,-ComparisonRange)
+		, if(DateRangeType = 'D-Month to Date' and ComparisonUnit = 'M'
+			, AddMonths(StartDate,-ComparisonRange)
+			, if(ComparisonUnit = 'Y'
+				,AddYears(StartDate,-ComparisonRange)
+				, if(ComparisonUnit = 'Q'
+					, AddMonths(StartDate,-3*ComparisonRange)
+					, if(ComparisonUnit = 'M'
+						, AddMonths(StartDate,-ComparisonRange)
+						, If(ComparisonUnit = 'W'
+							, StartDate -7 * ComparisonRange
+							, If(ComparisonUnit = 'D'
+								, StartDate -ComparisonRange
+								)
+							)
+						)
+					)
+				)
+			)
+		 )) as ComparisonStartDate
+	
+Resident TEMP_DATE_COMPARISON_CALENDAR;
+
+
+DROP TABLE TEMP_DATE_COMPARISON_CALENDAR, DATE_ANALYSIS_CALENDAR;
+
+
+COMPARISON_CALENDAR:
+NoConcatenate
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ComparisonStartDate,
+	ComparisonEndDate
+RESIDENT DATE_COMPARISON_CALENDAR;
+
+
+
+DROP TABLE DATE_COMPARISON_CALENDAR;
+
+
+
+
+///$tab Year
+TEMP_YEAR_ANALYSIS_CALENDAR:
+CrossTable(DateRangeType, Range, 3)
+LOAD
+	MakeDate(Year(Max(Date)),12,31) as EndDate,
+	Text(Year) as UniqueDate,
+	YearSeq as UniqueDateSeq,
+	
+	1 as [Y-Actual],
+	$(vMaxYRolling) as [Y-Rolling]
+RESIDENT CALENDAR
+group by Year, YearSeq;
+
+
+
+LEFT JOIN(TEMP_YEAR_ANALYSIS_CALENDAR)
+LOAD
+	'Y-Rolling' as DateRangeType,
+	
+	RowNo()+1 as RangeRolling
+AutoGenerate $(vMaxYRolling)-1;
+
+
+
+YEAR_ANALYSIS_CALENDAR:
+NoConcatenate
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	YearStart(AddYears(EndDate, 1 - if(isNull(RangeRolling), Range, RangeRolling))) as StartDate,
+	EndDate
+RESIDENT TEMP_YEAR_ANALYSIS_CALENDAR
+where isNull(RangeRolling) or (RangeRolling>1 and UniqueDateSeq - RangeRolling+1 >= $(vMinYearSeq));
+
+
+DROP TABLE TEMP_YEAR_ANALYSIS_CALENDAR;
+//DROP TABLE YEAR_ANALYSIS_CALENDAR;
+
+
+Concatenate(ANALYSIS_CALENDAR)
+LOAD 
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate 
+RESIDENT YEAR_ANALYSIS_CALENDAR;
+///$tab YearComparison
+TEMP_YEAR_COMPARISON_CALENDAR:
+NoConcatenate
+LOAD 
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate 
+Resident YEAR_ANALYSIS_CALENDAR;
+
+
+LEFT JOIN(TEMP_YEAR_COMPARISON_CALENDAR)
+LOAD
+	DateRangeType,
+	
+	ComparisonUnit,
+	MaxComparison
+RESIDENT COMPARISON_CONFIG;
+
+
+LEFT JOIN(TEMP_YEAR_COMPARISON_CALENDAR)
+LOAD
+	Num as MaxComparison,
+	
+	ExpandedNum as ComparisonRange
+Resident EXPAND_ROW
+where ExpandedNum>0;
+
+
+
+YEAR_COMPARISON_CALENDAR:
+NoConcatenate
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ComparisonStartDate,
+	ComparisonEndDate
+where ComparisonEndDate>='$(vStartDate)';
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	if(ComparisonUnit = 'Y'
+		, AddYears([StartDate],-[ComparisonRange])
+	) as ComparisonStartDate,
+	if(ComparisonUnit = 'Y'
+		, AddYears([EndDate],-[ComparisonRange])
+	) as ComparisonEndDate
+Resident TEMP_YEAR_COMPARISON_CALENDAR;
+
+
+DROP TABLE TEMP_YEAR_COMPARISON_CALENDAR;
+DROP TABLE YEAR_ANALYSIS_CALENDAR;
+
+
+
+CONCATENATE(COMPARISON_CALENDAR)
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ComparisonStartDate,
+	ComparisonEndDate
+RESIDENT YEAR_COMPARISON_CALENDAR;
+
+
+
+DROP TABLE YEAR_COMPARISON_CALENDAR;
+///$tab Quarter
+TEMP_QUARTER_ANALYSIS_CALENDAR:
+CrossTable(DateRangeType, Range, 3)
+LOAD
+	Date(Floor(Quarterend(Max(Date)))) as EndDate,
+	Text(YearQuarter) as UniqueDate,
+	YearQuarterSeq as UniqueDateSeq,
+	
+	1 as [Q-Actual],
+	Quarter as [Q-Year to Quarter],
+	$(vMaxQRolling) as [Q-Rolling]
+RESIDENT CALENDAR
+group by YearQuarter, YearQuarterSeq, Quarter;
+
+
+
+LEFT JOIN(TEMP_QUARTER_ANALYSIS_CALENDAR)
+LOAD
+	'Q-Rolling' as DateRangeType,
+	
+	RowNo()+1 as RangeRolling
+AutoGenerate $(vMaxQRolling)-1;
+
+
+
+QUARTER_ANALYSIS_CALENDAR:
+NoConcatenate
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,	
+	QuarterStart(AddMonths(EndDate, 1 - 3*if(isNull(RangeRolling), Range, RangeRolling))) as StartDate,
+	EndDate
+RESIDENT TEMP_QUARTER_ANALYSIS_CALENDAR
+where isNull(RangeRolling) or (RangeRolling>1 and UniqueDateSeq - RangeRolling+1 >= $(vMinYearQuarterSeq));;
+
+
+DROP TABLE TEMP_QUARTER_ANALYSIS_CALENDAR;
+//DROP TABLE QUARTER_ANALYSIS_CALENDAR;
+
+
+
+Concatenate(ANALYSIS_CALENDAR)
+LOAD 
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,	
+	RangeRolling,
+	StartDate,
+	EndDate 
+RESIDENT QUARTER_ANALYSIS_CALENDAR;
+///$tab QuarterComparison
+TEMP_QUARTER_COMPARISON_CALENDAR:
+NoConcatenate
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,	
+	RangeRolling,
+	StartDate,
+	EndDate 
+Resident QUARTER_ANALYSIS_CALENDAR;
+
+
+LEFT JOIN(TEMP_QUARTER_COMPARISON_CALENDAR)
+LOAD
+	DateRangeType,
+	
+	ComparisonUnit,
+	MaxComparison
+RESIDENT COMPARISON_CONFIG;
+
+
+LEFT JOIN(TEMP_QUARTER_COMPARISON_CALENDAR)
+LOAD
+	Num as MaxComparison,
+	
+	ExpandedNum as ComparisonRange
+Resident EXPAND_ROW
+where ExpandedNum>0;
+
+
+
+QUARTER_COMPARISON_CALENDAR:
+NoConcatenate
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ComparisonStartDate,
+	ComparisonEndDate
+where ComparisonEndDate>='$(vStartDate)';
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	Date(If(ComparisonUnit = 'Y'
+		, AddYears(StartDate,-ComparisonRange)
+		, if(ComparisonUnit = 'Q'
+			, AddMonths(StartDate,-3*ComparisonRange)
+			)
+		)) as ComparisonStartDate,
+	Date(Floor(MonthEnd(
+		If(ComparisonUnit = 'Y'
+			, AddYears(EndDate,-ComparisonRange)
+			, if(ComparisonUnit = 'Q'
+				, AddMonths(EndDate,-3 * ComparisonRange)
+				)
+			)
+		))) as ComparisonEndDate
+Resident TEMP_QUARTER_COMPARISON_CALENDAR;
+
+
+DROP TABLE TEMP_QUARTER_COMPARISON_CALENDAR;
+DROP TABLE QUARTER_ANALYSIS_CALENDAR;
+
+
+CONCATENATE(COMPARISON_CALENDAR)
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ComparisonStartDate,
+	ComparisonEndDate
+RESIDENT QUARTER_COMPARISON_CALENDAR;
+
+
+DROP TABLE QUARTER_COMPARISON_CALENDAR;
+///$tab Month
+TEMP_MONTH_ANALYSIS_CALENDAR:
+CrossTable(DateRangeType, Range, 3)
+LOAD
+	Date(Floor(Monthend(Max(Date)))) as EndDate,
+	Text(YearMonth) as UniqueDate,
+	YearMonthSeq as UniqueDateSeq,
+	
+	1 as [M-Actual],
+	Month as [M-Year to Month],
+	$(vMaxMRolling) as [M-Rolling]
+RESIDENT CALENDAR
+group by YearMonth, YearMonthSeq, Month;
+
+
+
+LEFT JOIN(TEMP_MONTH_ANALYSIS_CALENDAR)
+LOAD
+	'M-Rolling' as DateRangeType,
+	
+	RowNo()+1 as RangeRolling
+AutoGenerate $(vMaxMRolling)-1;
+
+
+MONTH_ANALYSIS_CALENDAR:
+NoConcatenate
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,	
+	RangeRolling,	
+	MonthStart(AddMonths(EndDate, 1 - if(isNull(RangeRolling), Range, RangeRolling))) as StartDate,
+	EndDate
+RESIDENT TEMP_MONTH_ANALYSIS_CALENDAR
+where isNull(RangeRolling) or (RangeRolling>1 and UniqueDateSeq - RangeRolling+1 >= $(vMinYearMonthSeq));
+
+
+DROP TABLE TEMP_MONTH_ANALYSIS_CALENDAR;
+//DROP TABLE MONTH_ANALYSIS_CALENDAR;
+
+
+
+Concatenate(ANALYSIS_CALENDAR)
+LOAD 
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,	
+	RangeRolling,
+	StartDate,
+	EndDate 
+RESIDENT MONTH_ANALYSIS_CALENDAR;
+///$tab MonthComparison
+TEMP_MONTH_COMPARISON_CALENDAR:
+NoConcatenate
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,	
+	RangeRolling,
+	StartDate,
+	EndDate 
+Resident MONTH_ANALYSIS_CALENDAR;
+
+
+LEFT JOIN(TEMP_MONTH_COMPARISON_CALENDAR)
+LOAD
+	DateRangeType,
+	ComparisonUnit,
+	MaxComparison
+RESIDENT COMPARISON_CONFIG;
+
+
+LEFT JOIN(TEMP_MONTH_COMPARISON_CALENDAR)
+LOAD
+	Num as MaxComparison,
+	ExpandedNum as ComparisonRange
+Resident EXPAND_ROW
+where ExpandedNum>0;
+
+
+
+MONTH_COMPARISON_CALENDAR:
+NoConcatenate
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ComparisonStartDate,
+	ComparisonEndDate
+where ComparisonEndDate>='$(vStartDate)';
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	If(ComparisonUnit = 'Y'
+		, AddYears(StartDate,-ComparisonRange)
+		, if(ComparisonUnit = 'Q'
+			, AddMonths(StartDate,-3*ComparisonRange)
+			, if(ComparisonUnit = 'M'
+				, AddMonths(StartDate,-ComparisonRange)
+				)
+			)
+		) as ComparisonStartDate,
+	Date(Floor(MonthEnd(
+		If(ComparisonUnit = 'Y'
+			, AddYears(EndDate,-ComparisonRange)
+			, if(ComparisonUnit = 'Q'
+				, AddMonths(EndDate,-3*ComparisonRange)
+				, if(ComparisonUnit = 'M'
+					, AddMonths(EndDate,-ComparisonRange)
+					)
+				)
+			)
+	))) as ComparisonEndDate
+Resident TEMP_MONTH_COMPARISON_CALENDAR;
+
+
+DROP TABLE TEMP_MONTH_COMPARISON_CALENDAR;
+DROP TABLE MONTH_ANALYSIS_CALENDAR;
+
+CONCATENATE(COMPARISON_CALENDAR)
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ComparisonStartDate,
+	ComparisonEndDate
+RESIDENT MONTH_COMPARISON_CALENDAR;
+
+
+DROP TABLE MONTH_COMPARISON_CALENDAR;
+///$tab WeekComplete
+TEMP_WEEK_COMPLETE_ANALYSIS_CALENDAR:
+CrossTable(DateRangeType, Range, 4)
+LOAD
+	Date(Floor(Weekend(Max(Date)))) as EndDate,
+	YearWeekComplete as UniqueDate,
+	YearWeekCompleteSeq as UniqueDateSeq,
+	WeekYearComplete,
+	
+	1 as [W-Actual],
+	WeekComplete as [W-Year to Week],
+	$(vMaxWRolling) as [W-Rolling]
+RESIDENT CALENDAR
+group by YearWeekComplete, YearWeekCompleteSeq, WeekComplete, WeekYearComplete;
+
+
+
+LEFT JOIN(TEMP_WEEK_COMPLETE_ANALYSIS_CALENDAR)
+LOAD
+	'W-Rolling' as DateRangeType,
+	
+	RowNo()+1 as RangeRolling
+AutoGenerate $(vMaxWRolling)-1;
+
+
+
+
+WEEK_COMPLETE_ANALYSIS_CALENDAR:
+NoConcatenate
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	WeekYearComplete,
+	Range,	
+	RangeRolling,
+	Date(EndDate - 7*if(isNull(RangeRolling), Range, RangeRolling)+1) as StartDate,
+	EndDate
+RESIDENT TEMP_WEEK_COMPLETE_ANALYSIS_CALENDAR
+where isNull(RangeRolling) or (RangeRolling>1 and UniqueDateSeq - RangeRolling+1 >= $(vMinYearWeekCompleteSeq));
+
+
+DROP TABLE TEMP_WEEK_COMPLETE_ANALYSIS_CALENDAR;
+//DROP TABLE WEEK_COMPLETE_ANALYSIS_CALENDAR;
+
+
+
+
+
+Concatenate(ANALYSIS_CALENDAR)
+LOAD 
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,	
+	RangeRolling,
+	StartDate,
+	EndDate 
+RESIDENT WEEK_COMPLETE_ANALYSIS_CALENDAR;
+
+
+///$tab WeekCompleteComparison
+TEMP_FIND_53_WEEK:
+LOAD
+	distinct Year
+RESIDENT CALENDAR;
+
+LEFT JOIN(TEMP_FIND_53_WEEK)
+LOAD
+	DateRangeType,
+	ComparisonUnit,
+	MaxComparison
+RESIDENT COMPARISON_CONFIG
+where DateRangeType = 'W-Actual'
+and ComparisonUnit= 'Y';
+
+
+LEFT JOIN(TEMP_FIND_53_WEEK)
+LOAD
+	Num as MaxComparison,
+	ExpandedNum as ComparisonRange
+Resident EXPAND_ROW;
+
+LEFT JOIN(TEMP_FIND_53_WEEK)
+LOAD
+	Num as ComparisonRange,
+	ExpandedNum as ComparisonRangeCalculation
+Resident EXPAND_ROW;
+
+
+FIND_53_WEEK:
+LOAD
+	Year as WeekYearComplete,
+	ComparisonRange,
+	Sum(Week53Flag) as ExtraWeekShift
+group by Year, ComparisonRange;
+LOAD
+	Year,
+	ComparisonRange,
+	if( Num(Weekday(MakeDate(Year - ComparisonRangeCalculation+1, 1, 1))) = 0
+		, 1
+		, 0
+	) as Week53Flag
+RESIDENT TEMP_FIND_53_WEEK;
+
+
+DROP TABLE TEMP_FIND_53_WEEK;
+
+
+
+
+
+TEMP_WEEK_COMPLETE_COMPARISON_CALENDAR:
+NoConcatenate
+LOAD 
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	WeekYearComplete,
+	Range,	
+	RangeRolling,
+	StartDate,
+	EndDate
+Resident WEEK_COMPLETE_ANALYSIS_CALENDAR;
+
+
+LEFT JOIN(TEMP_WEEK_COMPLETE_COMPARISON_CALENDAR)
+LOAD
+	DateRangeType,
+	ComparisonUnit,
+	MaxComparison
+RESIDENT COMPARISON_CONFIG;
+
+
+LEFT JOIN(TEMP_WEEK_COMPLETE_COMPARISON_CALENDAR)
+LOAD
+	Num as MaxComparison,
+	ExpandedNum as ComparisonRange
+Resident EXPAND_ROW
+where ExpandedNum>0;
+
+
+LEFT JOIN(TEMP_WEEK_COMPLETE_COMPARISON_CALENDAR)
+LOAD
+	WeekYearComplete,
+	ComparisonRange,
+	ExtraWeekShift
+Resident FIND_53_WEEK;
+
+DROP TABLE FIND_53_WEEK;
+
+
+
+WEEK_COMPLETE_COMPARISON_CALENDAR:
+NoConcatenate
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	RangeRolling,	
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ComparisonStartDate,
+	ComparisonEndDate
+where ComparisonEndDate>='$(vStartDate)';
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	RangeRolling,	
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ExtraWeekShift,
+	DateShiftYearStart,
+	DateShiftYearStartWeekdayNumber,
+	ComparisonStartDate,
+	Date(if(DateRangeType = 'W-Year to Week' and ComparisonUnit = 'Y'
+		, ComparisonStartDate + Num(mid(UniqueDate,6)) * 7 - DateShiftYearStartWeekdayNumber - 1
+		, if (ComparisonUnit = 'Y'
+			, EndDate -7* 52 * ComparisonRange + ExtraWeekShift * -7
+			, if(ComparisonUnit = 'W'
+				, EndDate - 7 * ComparisonRange
+				)
+			)
+		)) as ComparisonEndDate
+;
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	RangeRolling,	
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ExtraWeekShift,
+	DateShiftYearStart,
+	DateShiftYearStartWeekdayNumber,
+	Date(if(DateRangeType = 'W-Year to Week' and ComparisonUnit = 'Y'
+		, DateShiftYearStart
+		, if(ComparisonUnit = 'Y'
+			, StartDate -7* 52 * ComparisonRange + ExtraWeekShift * -7
+			, if(ComparisonUnit = 'W'
+				, StartDate -7* ComparisonRange
+				)
+			)
+		)) as ComparisonStartDate,
+
+;
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ExtraWeekShift,
+	DateShiftYearStart,
+	Num(Weekday(DateShiftYearStart)) as DateShiftYearStartWeekdayNumber
+;
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ExtraWeekShift,
+	if(ComparisonUnit = 'Y', MakeDate(WeekYearComplete -ComparisonRange, 1, 1)) as DateShiftYearStart
+
+Resident TEMP_WEEK_COMPLETE_COMPARISON_CALENDAR;
+
+
+
+DROP TABLE TEMP_WEEK_COMPLETE_COMPARISON_CALENDAR;
+DROP TABLE WEEK_COMPLETE_ANALYSIS_CALENDAR;
+
+
+CONCATENATE(COMPARISON_CALENDAR)
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	RangeRolling,	
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ComparisonStartDate,
+	ComparisonEndDate
+RESIDENT WEEK_COMPLETE_COMPARISON_CALENDAR;
+
+
+
+DROP TABLE WEEK_COMPLETE_COMPARISON_CALENDAR;
+
+//drop table COMPARISON_CALENDAR;
+
+
+
+
+
+///$tab LinkedTableDate
+TEMP_LINKED_TABLE_DATE_RANGE:
+LOAD
+	distinct
+	StartDate,
+	EndDate,
+	EndDate & '|' & (EndDate - StartDate) as %DATE_RANGE_KEY,
+	EndDate - StartDate as Days;
+LOAD 
+	RangeMax(StartDate, '$(vStartDate)') as StartDate,
+	RangeMin(EndDate, '$(vEndDate)') as EndDate
+RESIDENT ANALYSIS_CALENDAR;
+
+
+
+CONCATENATE(TEMP_LINKED_TABLE_DATE_RANGE)
+LOAD
+	distinct
+	StartDate,
+	EndDate,
+	EndDate & '|' & (EndDate - StartDate) as %DATE_RANGE_KEY,
+	EndDate - StartDate as Days;
+LOAD 
+	RangeMax(ComparisonStartDate, '$(vStartDate)') as StartDate,
+	RangeMin(ComparisonEndDate, '$(vEndDate)') as EndDate
+RESIDENT COMPARISON_CALENDAR;
+
+
+
+TEMP2_LINKED_TABLE_DATE_RANGE:
+NoConcatenate
+LOAD
+	distinct
+	StartDate,
+	EndDate,
+	%DATE_RANGE_KEY,
+	Days
+RESIDENT TEMP_LINKED_TABLE_DATE_RANGE;
+
+DROP TABLE TEMP_LINKED_TABLE_DATE_RANGE;
+
+
+
+
+LEFT JOIN(TEMP2_LINKED_TABLE_DATE_RANGE)
+LOAD
+	Num as Days,
+	ExpandedNum as Range
+RESIDENT EXPAND_ROW;
+
+
+LINKED_TABLE_DATE_RANGE:
+NoConcatenate
+LOAD
+	%DATE_RANGE_KEY,
+	Date(EndDate - Range) as %DATE_KEY
+RESIDENT TEMP2_LINKED_TABLE_DATE_RANGE;
+
+
+DROP TABLE TEMP2_LINKED_TABLE_DATE_RANGE;	
+
+
+//DROP TABLE LINKED_TABLE_DATE_RANGE;
+//DROP TABLE ANALYSIS_CALENDAR, COMPARISON_CALENDAR;
+///$tab Analytical_Calendar
+TEMP_ANALYTICAL_CALENDAR:
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	Range,
+	RangeRolling,
+	DateRangeType,
+	'N/A' as [Comparison Unit],
+
+	EndDate,
+	EndDate & '|' & (EndDate - StartDate) as %DATE_RANGE_KEY,
+	EndDate - StartDate as Days;
+LOAD 
+	UniqueDate,
+	UniqueDateSeq,
+	Range,
+	RangeRolling,
+	DateRangeType,
+	RangeMax(StartDate, '$(vStartDate)') as StartDate,
+	RangeMin(EndDate, '$(vEndDate)') as EndDate
+RESIDENT ANALYSIS_CALENDAR;
+
+
+
+CONCATENATE(TEMP_ANALYTICAL_CALENDAR)
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	Range,
+	RangeRolling,
+	DateRangeType,
+	ComparisonUnit,
+	ComparisonRange,
+
+	EndDate,
+	EndDate & '|' & (EndDate - StartDate) as %DATE_RANGE_KEY,
+	EndDate - StartDate as Days;
+LOAD 
+	UniqueDate,
+	UniqueDateSeq,
+	Range,
+	RangeRolling,
+	DateRangeType,
+	ComparisonUnit,
+	ComparisonRange,
+	
+	RangeMax(ComparisonStartDate, '$(vStartDate)') as StartDate,
+	RangeMin(ComparisonEndDate, '$(vEndDate)') as EndDate
+RESIDENT COMPARISON_CALENDAR;
+
+
+
+LEFT JOIN(TEMP_ANALYTICAL_CALENDAR)
+LOAD 
+	DateRangeType,
+	%ANALYSIS_PERSPECTIVE_SEQ
+RESIDENT ANALYTICAL_CALENDAR_ANALYSIS_PERSPECTIVE_SEQ;
+
+
+
+LEFT JOIN(TEMP_ANALYTICAL_CALENDAR)
+LOAD
+	ComparisonUnit,
+	%COMPARISON_PERSPECTIVE_SEQ
+RESIDENT ANALYTICAL_CALENDAR_COMPARISON_PERSPECTIVE_SEQ;
+
+
+
+
+
+
+
+
+ANALYTICAL_CALENDAR:
+NoConcatenate
+LOAD
+	%DATE_RANGE_KEY,
+	UniqueDate as [Unique Date],
+	UniqueDateSeq as [%UNIQUE_DATE_SEQ],
+	
+	If(mid(DateRangeType,3) = 'Rolling'
+		, 'Rolling '
+			& RangeRolling
+			&  Pick(Match(left(DateRangeType, 1), 'Y', 'Q', 'M', 'W', 'D')
+				,' Year', ' Quarter', ' Month', ' Week', ' Day')
+			& if(RangeRolling > 1, 's', '')
+		,if(mid(DateRangeType,3) = 'Actual'
+			, Pick(Match(left(DateRangeType, 1), 'Y', 'Q', 'M', 'W', 'D')
+				,'Year', 'Quarter', 'Month', 'Week', 'Date')
+			, mid(DateRangeType,3)
+		)
+	) as [Analysis Perspective],
+	if(mid(DateRangeType,3) = 'Rolling'
+		, %ANALYSIS_PERSPECTIVE_SEQ + RangeRolling
+		, %ANALYSIS_PERSPECTIVE_SEQ
+	) as %ANALYSIS_PERSPECTIVE_SEQ,
+	
+	
+	If(isNull(ComparisonUnit)
+		, 'N/A'
+		, if(ComparisonRange>=1
+			,ComparisonRange
+				& ' '
+				& Pick(Match(ComparisonUnit, 'Y', 'Q', 'M', 'W', 'D')
+					,' Year', ' Quarter', ' Month', ' Week', ' Day')
+				& if(ComparisonRange > 1 , 's', '')
+				& ' before'
+			, ComparisonUnit
+			)
+		) as [Comparison Perspective],
+	if(isNull(ComparisonUnit)
+		, -299999
+		, %COMPARISON_PERSPECTIVE_SEQ + ComparisonRange
+	) as %COMPARISON_PERSPECTIVE_SEQ
+;
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	Range,
+	RangeRolling,
+	DateRangeType,
+	ComparisonRange,
+	ComparisonUnit,
+	%DATE_RANGE_KEY,
+	%ANALYSIS_PERSPECTIVE_SEQ,
+	%COMPARISON_PERSPECTIVE_SEQ
+RESIDENT TEMP_ANALYTICAL_CALENDAR;
+
+
+
+
+DROP TABLE TEMP_ANALYTICAL_CALENDAR;	
+
+
+DROP TABLE ANALYSIS_CALENDAR, COMPARISON_CALENDAR;
+///$tab GenerateFact
+TRANSACTIONS:
+Load
+	Pick(Ceil(3*Rand1),'A','B','C') as Dim1,
+	Pick(Ceil(6*Rand1),'a','b','c','d','e','f') as Dim2,
+	Round(Round(1000*Rand()*Rand()*Rand2)*Rand()*Rand()*Rand1)  as Exp1,
+	Round( Round( 10*Rand()*Rand()*Rand2)*Rand()*Rand()*Rand1)  as Exp2,
+	Date('$(vStartDate)' + ceil(Rand()*$(vTotalDays))+1) as %DATE_KEY;
+Load
+	Rand() as Rand1,
+	Rand() as Rand2,
+	IterNo() as TransLineID,
+	RowNo() as TransID
+Autogenerate 500000
+While Rand()<=0.5 or IterNo()=1;
+ 
+///$tab CleanUp
+DROP TABLE ANALYTICAL_CALENDAR_ANALYSIS_PERSPECTIVE_SEQ, ANALYTICAL_CALENDAR_COMPARISON_PERSPECTIVE_SEQ;
+DROP TABLE EXPAND_ROW, COMPARISON_CONFIG;
+
+
+RENAME TABLE CALENDAR to DIM_CALENDAR;
+
+/*
+RENAME FIELD WeekYearComplete to [Week Year Complete];
+RENAME FIELD WeekComplete to [Week Complete];
+RENAME FIELD YearWeekComplete to [Year Week Complete];
+RENAME FIELD YearWeekCompleteSeq to [%YEAR_WEEK_COMPLETE_SEQ];
+
+DROP FIELDS WeekYearComplete, WeekComplete, YearWeekComplete, YearWeekCompleteSeq;
+
+
+RENAME FIELD WeekYearIncomplete to [Week Year Incomplete];
+RENAME FIELD WeekIncomplete to [Week Incomplete];
+RENAME FIELD YearWeekIncomplete to [Year Week Incomplete];
+RENAME FIELD YearWeekIncompleteSeq to [%YEAR_WEEK_INCOMPLETE_SEQ];
+
+//RENAME FIELD WeekYearIncomplete to [Week Year];
+//RENAME FIELD WeekIncomplete to [Week];
+//RENAME FIELD YearWeekIncomplete to [Year Week];
+//RENAME FIELD YearWeekIncompleteSeq to [%YEAR_WEEK_SEQ];
+*/
+
+
+RENAME FIELD WeekYearComplete to [Week Year];
+RENAME FIELD WeekComplete to [Week];
+RENAME FIELD YearWeekComplete to [Year Week];
+RENAME FIELD YearWeekCompleteSeq to [%YEAR_WEEK_SEQ];
+DROP FIELDS WeekYearIncomplete, WeekIncomplete, YearWeekIncomplete, YearWeekIncompleteSeq;
+
+
+
+RENAME FIELD YearMonth to [Year Month];
+RENAME FIELD YearQuarter to [Year Quarter];
+
+RENAME FIELD YearSeq to [%YEAR_SEQ];
+RENAME FIELD QuarterSeq to [%QUARTER_SEQ];
+RENAME FIELD MonthSeq to [%MONTH_SEQ];
+RENAME FIELD DateSeq to [%DATE_SEQ];
+RENAME FIELD WeekdaySeq to [%WEEK_DAY_SEQ];
+RENAME FIELD YearQuarterSeq to [%YEAR_QUARTER_SEQ];
+RENAME FIELD YearMonthSeq to [%YEAR_MONTH_SEQ];
+
+
+
+Set vTempPath = ;
+Set vFinalPath =;
+
+Set vStartDate = ;
+Set vEndDate = ;
+Set vTotalDays = ;
+
+Set vMaxYRolling = ;
+Set vMaxQRolling = ;
+Set vMaxMRolling = ;
+Set vMaxWRolling = ;
+Set vMaxDRolling = ;
+
+
+
+Set vMinYear = ;
+Set vMinYearQuarter = ;
+Set vMinYearMonth = ;
+Set vMinDate = ;
+Set vMinYearWeekComplete = ;
+Set vMinYearWeekIncomplete = ;
+Set vMinYearSeq = ;
+Set vMinYearQuarterSeq = ;
+Set vMinYearMonthSeq = ;
+Set vMinDateSeq = ;
+Set vMinYearWeekCompleteSeq = ;
+Set vMinYearWeekIncompleteSeq = ;
+Set vMaxYear = ;
+Set vMaxYearQuarter = ;
+Set vMaxYearMonth = ;
+Set vMaxDate = ;
+Set vMaxYearWeekComplete = ;
+Set vMaxYearWeekIncomplete = ;
+Set vMaxYearSeq = ;
+Set vMaxYearQuarterSeq = ;
+Set vMaxYearMonthSeq = ;
+Set vMaxDateSeq = ;
+Set vMaxYearWeekCompleteSeq = ;
+Set vMaxYearWeekIncompleteSeq = ;
+
+
+
+Set vMaxYComparison = ;
+Set vMaxQComparison = ;
+Set vMaxMComparison = ;
+Set vMaxWComparison = ;
+Set vMaxDComparison = ;
+
+
+///$tab STORE
+STORE DIM_CALENDAR INTO [C:\Users\kc\Desktop\DIM_CALENDAR.qvd] (qvd);
+
+STORE ANALYTICAL_CALENDAR INTO [C:\Users\kc\Desktop\ANALYTICAL_CALENDAR.qvd] (qvd);
+
+STORE LINKED_TABLE_DATE_RANGE INTO [C:\Users\kc\Desktop\LINKED_TABLE_DATE_RANGE.qvd] (qvd);
+///$tab ExitScript
+Exit Script;
+///$tab WeekIncomplete
+TEMP_WEEK_INCOMPLETE_ANALYSIS_CALENDAR:
+CrossTable(DateRangeType, Range, 3)
+LOAD
+	Date(Floor(Weekend(Max(Date)))) as EndDate,
+	YearWeekIncomplete as UniqueDate,
+	YearWeekIncompleteSeq as UniqueDateSeq,
+	
+	1 as [W-Actual],
+	WeekIncomplete as [W-Year to Week],
+	$(vMaxWRolling) as [W-Rolling]
+RESIDENT CALENDAR
+group by YearWeekIncomplete, YearWeekIncompleteSeq, WeekIncomplete;
+
+
+
+LEFT JOIN(TEMP_WEEK_INCOMPLETE_ANALYSIS_CALENDAR)
+LOAD
+	'W-Rolling' as DateRangeType,
+	RecNo()+1 as RangeRolling
+AutoGenerate $(vMaxWRolling)-1;
+
+
+WEEK_INCOMPLETE_ANALYSIS_CALENDAR:
+NoConcatenate
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,	
+	RangeRolling,
+	
+	UniqueDateSeq +1 - if(isNull(RangeRolling), Range, RangeRolling) as StartDateYearWeekIncompleteSeq
+RESIDENT TEMP_WEEK_INCOMPLETE_ANALYSIS_CALENDAR
+where isNull(RangeRolling) or (RangeRolling>1 and UniqueDateSeq - RangeRolling+1 >= $(vMinYearWeekIncompleteSeq));
+
+
+LEFT JOIN(WEEK_INCOMPLETE_ANALYSIS_CALENDAR)
+LOAD
+	YearWeekIncompleteSeq as StartDateYearWeekIncompleteSeq,
+ 	Min(Date) as StartDate
+RESIDENT CALENDAR
+group by YearWeekIncompleteSeq;
+
+
+LEFT JOIN(WEEK_INCOMPLETE_ANALYSIS_CALENDAR)
+LOAD
+	YearWeekIncompleteSeq as UniqueDateSeq,
+ 	Max(Date) as EndDate
+RESIDENT CALENDAR
+group by YearWeekIncompleteSeq;
+
+
+
+DROP TABLE TEMP_WEEK_INCOMPLETE_ANALYSIS_CALENDAR;
+//DROP TABLE WEEK_INCOMPLETE_ANALYSIS_CALENDAR;
+
+
+
+
+
+Concatenate(ANALYSIS_CALENDAR)
+LOAD 
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	RangeRolling,
+	StartDate,
+	EndDate 
+RESIDENT WEEK_INCOMPLETE_ANALYSIS_CALENDAR;
+
+
+
+
+
+
+
+///$tab WeekIncompleteComparison
+TEMP_WEEK_INCOMPLETE_COMPARISON_CALENDAR:
+NoConcatenate
+LOAD *
+Resident WEEK_INCOMPLETE_ANALYSIS_CALENDAR;
+
+
+LEFT JOIN(TEMP_WEEK_INCOMPLETE_COMPARISON_CALENDAR)
+LOAD
+	DateRangeType,
+	ComparisonUnit,
+	MaxComparison
+RESIDENT COMPARISON_CONFIG;
+
+
+LEFT JOIN(TEMP_WEEK_INCOMPLETE_COMPARISON_CALENDAR)
+LOAD
+	Num as MaxComparison,
+	ExpandedNum as ComparisonRange
+Resident EXPAND_ROW
+where ExpandedNum>0;
+
+
+WEEK_INCOMPLETE_COMPARISON_CALENDAR:
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	Range,
+	RangeRolling,
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	IF(ComparisonUnit = 'Y'
+		, StartDateYearWeekIncompleteSeq - 53 * ComparisonRange
+		, if(ComparisonUnit = 'W'
+			, StartDateYearWeekIncompleteSeq - ComparisonRange
+			)
+		) as ComparisonStartDateYearWeekIncompleteSeq,
+	if(ComparisonUnit = 'Y'
+		, UniqueDateSeq - 53 * ComparisonRange
+		, if(ComparisonUnit = 'W'
+			, UniqueDateSeq - ComparisonRange
+			)
+		) as ComparisonEndDateYearWeekIncompleteSeq
+Resident TEMP_WEEK_INCOMPLETE_COMPARISON_CALENDAR;
+
+
+LEFT JOIN(WEEK_INCOMPLETE_COMPARISON_CALENDAR)
+LOAD
+	YearWeekIncompleteSeq as ComparisonStartDateYearWeekIncompleteSeq,
+ 	Min(Date) as ComparisonStartDate
+RESIDENT CALENDAR
+group by YearWeekIncompleteSeq;
+
+
+LEFT JOIN(WEEK_INCOMPLETE_COMPARISON_CALENDAR)
+LOAD
+	YearWeekIncompleteSeq as ComparisonEndDateYearWeekIncompleteSeq,
+ 	Max(Date) as ComparisonEndDate
+RESIDENT CALENDAR
+group by YearWeekIncompleteSeq;
+
+
+
+TEMP2_WEEK_INCOMPLETE_COMPARISON_CALENDAR:
+NoConcatenate
+LOAD
+	UniqueDate,
+	UniqueDateSeq,
+	DateRangeType,
+	RangeRolling,	
+	StartDate,
+	EndDate,
+	ComparisonRange,
+	ComparisonUnit,
+	ComparisonStartDate,
+	ComparisonEndDate
+Resident WEEK_INCOMPLETE_COMPARISON_CALENDAR
+where ComparisonEndDate>='$(vStartDate)';
+
+
+drop table WEEK_INCOMPLETE_COMPARISON_CALENDAR;
+RENAME TABLE TEMP2_WEEK_INCOMPLETE_COMPARISON_CALENDAR to WEEK_INCOMPLETE_COMPARISON_CALENDAR;
+
+DROP TABLE TEMP_WEEK_INCOMPLETE_COMPARISON_CALENDAR;
+DROP TABLE WEEK_INCOMPLETE_ANALYSIS_CALENDAR;
+
+CONCATENATE(COMPARISON_CALENDAR)
+LOAD
+*
+RESIDENT WEEK_INCOMPLETE_COMPARISON_CALENDAR;
+
+
+DROP TABLE WEEK_INCOMPLETE_COMPARISON_CALENDAR;
+
